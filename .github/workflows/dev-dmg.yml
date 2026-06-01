@@ -1,0 +1,88 @@
+name: Dev DMG
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: dev-dmg-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-dmg:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target_arch: arm64
+            dmg_suffix: apple-silicon
+            artifact_name: dev-dmg-arm64
+            bundle_mihomo_binary: '1'
+          - target_arch: arm64
+            dmg_suffix: apple-silicon-no-core
+            artifact_name: dev-dmg-arm64-no-core
+            bundle_mihomo_binary: '0'
+          - target_arch: x86_64
+            dmg_suffix: intel
+            artifact_name: dev-dmg-x86_64
+            bundle_mihomo_binary: '1'
+          - target_arch: x86_64
+            dmg_suffix: intel-no-core
+            artifact_name: dev-dmg-x86_64-no-core
+            bundle_mihomo_binary: '0'
+    runs-on: macos-15
+    env:
+      APP_VERSION: dev-${{ github.run_number }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Verify Swift toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          swift --version
+          if ! swift --version | grep -Eq 'Swift version (6\.[2-9]|[7-9]\.)'; then
+            echo "Swift 6.2+ is required by Package.swift (// swift-tools-version: 6.2)." >&2
+            exit 1
+          fi
+
+      - name: Build app
+        shell: bash
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
+          PREPARE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
+          BUNDLE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
+          TARGET_ARCH="${{ matrix.target_arch }}" \
+          ./Scripts/build.sh app
+
+      - name: Validate macOS 12 minos
+        shell: bash
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
+          Scripts/validate_macos12_minos.sh
+
+      - name: Build dmg
+        shell: bash
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
+          DMG_SUFFIX="${{ matrix.dmg_suffix }}" \
+          ./Scripts/build.sh dmg
+
+      - name: Upload dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            dist/ClashBar-${{ env.APP_VERSION }}-${{ matrix.dmg_suffix }}.dmg
+            dist/ClashBar-${{ env.APP_VERSION }}-${{ matrix.dmg_suffix }}.dmg.sha256
+          if-no-files-found: error
