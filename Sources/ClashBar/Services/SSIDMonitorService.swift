@@ -169,9 +169,11 @@ final class SSIDMonitorService: NSObject {
             return ssid
         }
 
-        for name in self.wifiClient.interfaceNames() ?? [] {
-            if let ssid = self.wifiClient.interface(withName: name)?.ssid()?.trimmedNonEmpty {
-                return ssid
+        if #available(macOS 13.0, *) {
+            for name in self.wifiClient.interfaceNames() ?? [] {
+                if let ssid = self.wifiClient.interface(withName: name)?.ssid()?.trimmedNonEmpty {
+                    return ssid
+                }
             }
         }
 

@@ -605,7 +605,7 @@ extension AppViewModel {
             while !Task.isCancelled {
                 await self?.performDueRemoteConfigAutoUpdatesIfNeeded()
                 do {
-                    try await Task.sleep(for: .seconds(60))
+                    try await Task.sleep(nanoseconds: 60_000_000_000)
                 } catch {
                     break
                 }
@@ -648,7 +648,7 @@ extension AppViewModel {
         remoteConfigMenuRefreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(60))
+                    try await Task.sleep(nanoseconds: 60_000_000_000)
                 } catch {
                     break
                 }
