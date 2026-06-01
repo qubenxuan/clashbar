@@ -80,6 +80,52 @@ EOF
   esac
 }
 
+compare_versions() {
+  awk -v a="$1" -v b="$2" '
+    BEGIN {
+      split(a, av, ".")
+      split(b, bv, ".")
+      for (i = 1; i <= 3; i++) {
+        ai = av[i] == "" ? 0 : av[i] + 0
+        bi = bv[i] == "" ? 0 : bv[i] + 0
+        if (ai < bi) { print -1; exit }
+        if (ai > bi) { print 1; exit }
+      }
+      print 0
+    }'
+}
+
+extract_vtool_field() {
+  local field="$1"
+  awk -v field="$field" '$1 == field { print $2; exit }'
+}
+
+normalize_mihomo_minos() {
+  local path="$1"
+  local current_minos="$2"
+  local output="$3"
+  local sdk
+  local tmp_path
+
+  sdk="$(printf '%s\n' "$output" | extract_vtool_field "sdk")"
+  if [ -z "$sdk" ]; then
+    sdk="$MIHOMO_EXPECTED_MINOS"
+  fi
+
+  tmp_path="${path}.vtool.tmp"
+  rm -f "$tmp_path"
+
+  vtool \
+    -set-build-version macos "$MIHOMO_EXPECTED_MINOS" "$sdk" \
+    -replace \
+    -output "$tmp_path" \
+    "$path"
+  chmod 755 "$tmp_path"
+  mv "$tmp_path" "$path"
+
+  echo "Normalized mihomo minos: $current_minos -> $MIHOMO_EXPECTED_MINOS"
+}
+
 validate_mihomo_minos() {
   local path="$1"
 
@@ -91,7 +137,7 @@ validate_mihomo_minos() {
   local output
   local minos
   output="$(vtool -show-build "$path")"
-  minos="$(printf '%s\n' "$output" | awk '$1 == "minos" { print $2; exit }')"
+  minos="$(printf '%s\n' "$output" | extract_vtool_field "minos")"
 
   if [ -z "$minos" ]; then
     echo "Unable to read mihomo minos from vtool output: $path" >&2
@@ -99,8 +145,22 @@ validate_mihomo_minos() {
     exit 1
   fi
   if [ "$minos" != "$MIHOMO_EXPECTED_MINOS" ]; then
-    echo "Prepared mihomo minos is $minos, expected $MIHOMO_EXPECTED_MINOS." >&2
-    echo "Set MIHOMO_VERSION to a macOS 12-compatible release or build with BUNDLE_MIHOMO_BINARY=0." >&2
+    case "$(compare_versions "$minos" "$MIHOMO_EXPECTED_MINOS")" in
+      -1)
+        normalize_mihomo_minos "$path" "$minos" "$output"
+        output="$(vtool -show-build "$path")"
+        minos="$(printf '%s\n' "$output" | extract_vtool_field "minos")"
+        ;;
+      1)
+        echo "Prepared mihomo minos is $minos, expected $MIHOMO_EXPECTED_MINOS." >&2
+        echo "Set MIHOMO_VERSION to a macOS 12-compatible release or build with BUNDLE_MIHOMO_BINARY=0." >&2
+        exit 1
+        ;;
+    esac
+  fi
+
+  if [ "$minos" != "$MIHOMO_EXPECTED_MINOS" ]; then
+    echo "Prepared mihomo minos is $minos after normalization, expected $MIHOMO_EXPECTED_MINOS." >&2
     exit 1
   fi
 

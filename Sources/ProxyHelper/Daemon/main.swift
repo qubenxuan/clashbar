@@ -503,34 +503,42 @@ private final class ProxyHelperService: NSObject, ProxyHelperProtocol {
     }
 }
 
-private final class ProxyHelperListenerDelegate: NSObject, NSXPCListenerDelegate {
-    private let service = ProxyHelperService()
-
-    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
-        newConnection.exportedInterface = NSXPCInterface(with: ProxyHelperProtocol.self)
-        newConnection.exportedObject = self.service
-        newConnection.resume()
-        return true
-    }
-}
-
-@main
-private struct ClashBarProxyHelperMain {
-    static func main() {
-        let delegate = ProxyHelperListenerDelegate()
-        let listener = NSXPCListener(machServiceName: ProxyHelperConstants.machServiceName)
-        listener.delegate = delegate
-        listener.setConnectionCodeSigningRequirement(self.buildClientRequirement())
-        listener.resume()
-        dispatchMain()
-    }
-
-    private static func buildClientRequirement() -> String {
+private enum ProxyHelperClientAuthenticator {
+    static func clientRequirement() -> String {
         let base = ProxyHelperConstants.allowedClientRequirement
         guard let teamID = selfTeamIdentifier(), !teamID.isEmpty else {
             return base
         }
         return "\(base) and certificate leaf[subject.OU] = \"\(teamID)\""
+    }
+
+    static func isAuthorized(_ connection: NSXPCConnection) -> Bool {
+        let pid = connection.processIdentifier
+        guard pid > 0 else {
+            return false
+        }
+
+        var requirement: SecRequirement?
+        let requirementStatus = SecRequirementCreateWithString(
+            self.clientRequirement() as CFString,
+            SecCSFlags(),
+            &requirement)
+        guard requirementStatus == errSecSuccess, let requirement else {
+            return false
+        }
+
+        let attributes = [kSecGuestAttributePid as String: NSNumber(value: pid)]
+        var clientCode: SecCode?
+        let copyStatus = SecCodeCopyGuestWithAttributes(
+            nil,
+            attributes as CFDictionary,
+            SecCSFlags(),
+            &clientCode)
+        guard copyStatus == errSecSuccess, let clientCode else {
+            return false
+        }
+
+        return SecCodeCheckValidity(clientCode, SecCSFlags(), requirement) == errSecSuccess
     }
 
     private static func selfTeamIdentifier() -> String? {
@@ -548,5 +556,35 @@ private struct ClashBarProxyHelperMain {
             let dict = info as? [String: Any]
         else { return nil }
         return dict[kSecCodeInfoTeamIdentifier as String] as? String
+    }
+}
+
+private final class ProxyHelperListenerDelegate: NSObject, NSXPCListenerDelegate {
+    private let service = ProxyHelperService()
+
+    func listener(_ listener: NSXPCListener, shouldAcceptNewConnection newConnection: NSXPCConnection) -> Bool {
+        guard ProxyHelperClientAuthenticator.isAuthorized(newConnection) else {
+            newConnection.invalidate()
+            return false
+        }
+
+        newConnection.exportedInterface = NSXPCInterface(with: ProxyHelperProtocol.self)
+        newConnection.exportedObject = self.service
+        newConnection.resume()
+        return true
+    }
+}
+
+@main
+private struct ClashBarProxyHelperMain {
+    static func main() {
+        let delegate = ProxyHelperListenerDelegate()
+        let listener = NSXPCListener(machServiceName: ProxyHelperConstants.machServiceName)
+        listener.delegate = delegate
+        if #available(macOS 13.0, *) {
+            listener.setConnectionCodeSigningRequirement(ProxyHelperClientAuthenticator.clientRequirement())
+        }
+        listener.resume()
+        dispatchMain()
     }
 }
