@@ -155,7 +155,7 @@ jobs:
         shell: bash
         env:
           GITHUB_REPOSITORY: ${{ github.repository }}
-          SOURCE_BRANCH: beta
+          SOURCE_BRANCH: alpha
         run: |
           chmod +x Scripts/generate_beta_release_notes.sh
           Scripts/generate_beta_release_notes.sh \
@@ -174,3 +174,4 @@ jobs:
           fail_on_unmatched_files: true
           files: |
             dist/*.dmg
+            dist/*.dmg.sha256
