@@ -72,6 +72,21 @@ private final class ContinuationBox<Value: Sendable>: @unchecked Sendable {
     }
 }
 
+private final class LockedValue<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value: Value
+
+    init(_ value: Value) {
+        self.value = value
+    }
+
+    func withLock<Result>(_ body: (inout Value) -> Result) -> Result {
+        self.lock.lock()
+        defer { self.lock.unlock() }
+        return body(&self.value)
+    }
+}
+
 struct SystemProxyService {
     private let helperResponseTimeoutNanoseconds: UInt64 = 4_000_000_000
     private let helperLaunchRetryDelayNanoseconds: UInt64 = 250_000_000
@@ -80,7 +95,7 @@ struct SystemProxyService {
     private static let systemSettingsOpenGate = SystemSettingsOpenGate()
 
     private final class SystemSettingsOpenGate: Sendable {
-        private let state = OSAllocatedUnfairLock(initialState: Date.distantPast)
+        private let state = LockedValue(Date.distantPast)
 
         func openIfNeeded(minimumInterval: TimeInterval) {
             let shouldOpen = self.state.withLock { lastOpened in
@@ -93,8 +108,19 @@ struct SystemProxyService {
             }
 
             if shouldOpen {
-                SMAppService.openSystemSettingsLoginItems()
+                Self.openLoginItemsSettingsIfSupported()
             }
+        }
+
+        private static func openLoginItemsSettingsIfSupported() {
+            if #available(macOS 13.0, *) {
+                Self.openLoginItemsSettings()
+            }
+        }
+
+        @available(macOS 13.0, *)
+        private static func openLoginItemsSettings() {
+            SMAppService.openSystemSettingsLoginItems()
         }
     }
 
@@ -102,6 +128,107 @@ struct SystemProxyService {
         case ready
         case needsApproval
         case failed(String?)
+    }
+
+    private protocol HelperServiceRegistrar {
+        var registrationState: SystemProxyHelperRegistrationState { get }
+        var statusMessage: String? { get }
+
+        func register() -> HelperRegistrationResult
+        func unregister() async throws
+    }
+
+    private struct UnavailableHelperServiceRegistrar: HelperServiceRegistrar {
+        private let message = "macOS 12 does not support in-app system proxy helper registration. " +
+            "Use manual proxy settings until a legacy helper installer is available."
+
+        var registrationState: SystemProxyHelperRegistrationState {
+            .unavailable
+        }
+
+        var statusMessage: String? {
+            self.message
+        }
+
+        func register() -> HelperRegistrationResult {
+            .failed(self.message)
+        }
+
+        func unregister() async throws {}
+    }
+
+    @available(macOS 13.0, *)
+    private struct SMAppServiceHelperRegistrar: HelperServiceRegistrar {
+        private let service = SMAppService.daemon(plistName: ProxyHelperConstants.daemonPlistName)
+
+        var registrationState: SystemProxyHelperRegistrationState {
+            switch self.service.status {
+            case .enabled:
+                .enabled
+            case .requiresApproval:
+                .requiresApproval
+            case .notRegistered:
+                .notRegistered
+            case .notFound:
+                .unavailable
+            @unknown default:
+                .unavailable
+            }
+        }
+
+        var statusMessage: String? {
+            "status=\(self.service.status.rawValue)"
+        }
+
+        func register() -> HelperRegistrationResult {
+            if self.service.status == .enabled {
+                return .ready
+            }
+
+            do {
+                try self.service.register()
+            } catch {
+                if self.service.status == .enabled {
+                    return .ready
+                }
+                if self.service.status == .requiresApproval || Self.isLikelyApprovalError(error) {
+                    return .needsApproval
+                }
+                return .failed(error.localizedDescription)
+            }
+
+            switch self.service.status {
+            case .enabled:
+                return .ready
+            case .requiresApproval:
+                return .needsApproval
+            case .notRegistered, .notFound:
+                return .failed("status=\(self.service.status.rawValue)")
+            @unknown default:
+                return .failed("status=\(self.service.status.rawValue)")
+            }
+        }
+
+        func unregister() async throws {
+            try await self.service.unregister()
+        }
+
+        private static func isLikelyApprovalError(_ error: Error) -> Bool {
+            let normalized = error.localizedDescription.lowercased()
+            return normalized.contains("operation not permitted")
+                || normalized.contains("disallowed")
+                || normalized.contains("denied")
+                || normalized.contains("launch constraint")
+                || normalized.contains("background item")
+                || normalized.contains("approval")
+        }
+    }
+
+    private func helperRegistrar() -> any HelperServiceRegistrar {
+        if #available(macOS 13.0, *) {
+            return SMAppServiceHelperRegistrar()
+        }
+        return UnavailableHelperServiceRegistrar()
     }
 
     func warmUpHelperIfPossible() async {
@@ -113,7 +240,7 @@ struct SystemProxyService {
             return
         }
 
-        switch self.attemptHelperRegistration() {
+        switch self.helperRegistrar().register() {
         case .ready:
             _ = try? await self.triggerHelperDemandLaunchAndWait()
         case .needsApproval, .failed:
@@ -169,8 +296,18 @@ struct SystemProxyService {
     }
 
     func readHelperHealthSnapshot() async -> SystemProxyHelperHealthSnapshot {
-        let registrationState = self.registrationState(from: self.helperService().status)
+        let registrar = self.helperRegistrar()
+        let registrationState = registrar.registrationState
         let backgroundActivityAllowed = registrationState != .requiresApproval
+
+        if registrationState == .unavailable {
+            let error = SystemProxyServiceError.helperNotRegistered(registrar.statusMessage)
+            return self.failedHealthSnapshot(
+                registrationState: registrationState,
+                backgroundActivityAllowed: backgroundActivityAllowed,
+                processRunning: false,
+                error: error)
+        }
 
         do {
             let processRunning = try self.isHelperProcessRunning()
@@ -192,7 +329,7 @@ struct SystemProxyService {
                     processRunning: processRunning,
                     error: error)
             case .notRegistered, .unavailable:
-                let error = SystemProxyServiceError.helperNotRegistered(nil)
+                let error = SystemProxyServiceError.helperNotRegistered(registrar.statusMessage)
                 return self.failedHealthSnapshot(
                     registrationState: registrationState,
                     backgroundActivityAllowed: backgroundActivityAllowed,
@@ -263,25 +400,30 @@ struct SystemProxyService {
     }
 
     private func ensureHelperReadyForUse() async throws {
+        let registrar = self.helperRegistrar()
+        if registrar.registrationState == .unavailable {
+            throw SystemProxyServiceError.helperNotRegistered(registrar.statusMessage)
+        }
+
         try self.validateHelperEnvironment()
         try self.ensureHelperRegistered()
         try await self.ensureHelperProcessResponsive()
     }
 
     private func ensureHelperRegistered() throws {
-        if self.helperService().status == .enabled {
+        let registrar = self.helperRegistrar()
+        if registrar.registrationState == .enabled {
             return
         }
 
-        switch self.attemptHelperRegistration() {
+        switch registrar.register() {
         case .ready:
             return
         case .needsApproval:
             self.openSystemSettingsLoginItemsIfNeeded()
             throw SystemProxyServiceError.helperNeedsApproval
         case let .failed(message):
-            let status = self.helperService().status
-            throw SystemProxyServiceError.helperNotRegistered(message ?? "status=\(status.rawValue)")
+            throw SystemProxyServiceError.helperNotRegistered(message ?? registrar.statusMessage)
         }
     }
 
@@ -301,21 +443,6 @@ struct SystemProxyService {
         }
 
         throw SystemProxyServiceError.helperStartTimedOut
-    }
-
-    private func registrationState(from status: SMAppService.Status) -> SystemProxyHelperRegistrationState {
-        switch status {
-        case .enabled:
-            .enabled
-        case .requiresApproval:
-            .requiresApproval
-        case .notRegistered:
-            .notRegistered
-        case .notFound:
-            .unavailable
-        @unknown default:
-            .unavailable
-        }
     }
 
     private func failedHealthSnapshot(
@@ -380,49 +507,8 @@ struct SystemProxyService {
         return bundlePath.hasPrefix("/Applications/") && bundlePath.hasSuffix(".app")
     }
 
-    private func attemptHelperRegistration() -> HelperRegistrationResult {
-        let daemonService = self.helperService()
-        if daemonService.status == .enabled {
-            return .ready
-        }
-
-        do {
-            try daemonService.register()
-        } catch {
-            if daemonService.status == .enabled {
-                return .ready
-            }
-            if daemonService.status == .requiresApproval || self.isLikelyApprovalError(error) {
-                return .needsApproval
-            }
-            return .failed(error.localizedDescription)
-        }
-
-        switch daemonService.status {
-        case .enabled:
-            return .ready
-        case .requiresApproval:
-            return .needsApproval
-        case .notRegistered, .notFound:
-            return .failed("status=\(daemonService.status.rawValue)")
-        @unknown default:
-            return .failed("status=\(daemonService.status.rawValue)")
-        }
-    }
-
-    private func isLikelyApprovalError(_ error: Error) -> Bool {
-        let normalized = error.localizedDescription.lowercased()
-        return normalized.contains("operation not permitted")
-            || normalized.contains("disallowed")
-            || normalized.contains("denied")
-            || normalized.contains("launch constraint")
-            || normalized.contains("background item")
-            || normalized.contains("approval")
-    }
-
     private func reregisterHelper() async throws {
-        let daemonService = self.helperService()
-        try? await daemonService.unregister()
+        try? await self.helperRegistrar().unregister()
         try self.ensureHelperRegistered()
     }
 
@@ -462,10 +548,6 @@ struct SystemProxyService {
     {
         if success { return .success(value()) }
         return .failure(SystemProxyServiceError.helperOperationFailed(message ?? "Unknown helper error."))
-    }
-
-    private func helperService() -> SMAppService {
-        SMAppService.daemon(plistName: ProxyHelperConstants.daemonPlistName)
     }
 
     private func openSystemSettingsLoginItemsIfNeeded() {

@@ -241,6 +241,8 @@ extension AppViewModel {
         switch launchError {
         case .unsupportedEnvironment:
             return tr("app.launch_at_login.error.unsupported_environment")
+        case .unsupportedSystemVersion:
+            return tr("app.launch_at_login.error.unsupported_system_version")
         case .requiresApproval:
             return tr("app.launch_at_login.error.requires_approval")
         case let .registrationFailed(message):

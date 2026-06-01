@@ -221,6 +221,7 @@
 "app.settings.error.save_failed" = "%@ save failed: %@";
 "app.settings.overlay_success" = "Local settings preserved and applied over current config";
 "app.launch_at_login.error.unsupported_environment" = "Launch at login can only be enabled from the packaged .app build";
+"app.launch_at_login.error.unsupported_system_version" = "Launch at login requires macOS 13 or later. On macOS 12, add ClashBar manually in System Preferences > Users & Groups > Login Items.";
 "app.launch_at_login.error.requires_approval" = "Allow ClashBar in System Settings > General > Login Items";
 "app.launch_at_login.error.register_failed" = "Failed to enable launch at login: %@";
 "app.launch_at_login.error.unregister_failed" = "Failed to disable launch at login: %@";

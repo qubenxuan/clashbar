@@ -31,6 +31,7 @@ Stages:
 Environment:
   PREPARE_MIHOMO_BINARY=0  Skip preprocessing/downloading mihomo.
   BUNDLE_MIHOMO_BINARY=0   Build a no-core app/dmg without bundled mihomo.
+  MACOSX_DEPLOYMENT_TARGET=12.0  Build binaries compatible with macOS 12+.
   RELEASE_OPTIMIZE_FOR_SIZE=0  Disable -Osize for packaged release builds.
   STRIP_BINARIES=0         Keep packaged app/helper binaries unstripped.
 EOF

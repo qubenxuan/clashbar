@@ -186,7 +186,7 @@ struct RemoteMachineManagerView: TranslatingView {
 
     private var machineList: some View {
         VStack(spacing: 0) {
-            ScrollView {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: RemoteMachineManagerTokens.rowSpacing) {
                     self.localMachineRow
 
@@ -204,7 +204,6 @@ struct RemoteMachineManagerView: TranslatingView {
                 .padding(.horizontal, RemoteMachineManagerTokens.contentPadding)
                 .padding(.bottom, RemoteMachineManagerTokens.contentPadding)
             }
-            .scrollIndicators(.hidden)
 
             Button {
                 self.editorMode = .add

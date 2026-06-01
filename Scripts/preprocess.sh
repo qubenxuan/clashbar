@@ -10,6 +10,7 @@ DOWNLOAD_MIHOMO="${DOWNLOAD_MIHOMO:-1}"
 REUSE_LOCAL_MIHOMO="${REUSE_LOCAL_MIHOMO:-1}"
 PREPARE_MIHOMO_BINARY="${PREPARE_MIHOMO_BINARY:-1}"
 PREPROCESS_DIR="${PREPROCESS_DIR:-$ROOT/dist/preprocess}"
+MIHOMO_EXPECTED_MINOS="${MIHOMO_EXPECTED_MINOS:-12.0}"
 
 MIHOMO_RESOURCE_PATH="$ROOT/Sources/ClashBar/Resources/bin/mihomo"
 PREPROCESSED_MIHOMO_PATH="$PREPROCESS_DIR/mihomo"
@@ -54,12 +55,20 @@ resolve_mihomo_asset_candidates() {
   case "$arch" in
     x86_64)
       cat <<EOF
+mihomo-darwin-amd64-compatible-go124-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-compatible-go122-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-v1-go124-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-v1-go122-${MIHOMO_VERSION}.gz
 mihomo-darwin-amd64-v2-go122-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-go124-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-go122-${MIHOMO_VERSION}.gz
+mihomo-darwin-amd64-compatible-${MIHOMO_VERSION}.gz
 mihomo-darwin-amd64-${MIHOMO_VERSION}.gz
 EOF
       ;;
     arm64)
       cat <<EOF
+mihomo-darwin-arm64-go124-${MIHOMO_VERSION}.gz
 mihomo-darwin-arm64-go122-${MIHOMO_VERSION}.gz
 mihomo-darwin-arm64-${MIHOMO_VERSION}.gz
 EOF
@@ -69,6 +78,33 @@ EOF
       exit 1
       ;;
   esac
+}
+
+validate_mihomo_minos() {
+  local path="$1"
+
+  if ! command -v vtool >/dev/null 2>&1; then
+    echo "Warning: vtool not found; skipping mihomo minos validation during preprocessing."
+    return
+  fi
+
+  local output
+  local minos
+  output="$(vtool -show-build "$path")"
+  minos="$(printf '%s\n' "$output" | awk '$1 == "minos" { print $2; exit }')"
+
+  if [ -z "$minos" ]; then
+    echo "Unable to read mihomo minos from vtool output: $path" >&2
+    echo "$output" >&2
+    exit 1
+  fi
+  if [ "$minos" != "$MIHOMO_EXPECTED_MINOS" ]; then
+    echo "Prepared mihomo minos is $minos, expected $MIHOMO_EXPECTED_MINOS." >&2
+    echo "Set MIHOMO_VERSION to a macOS 12-compatible release or build with BUNDLE_MIHOMO_BINARY=0." >&2
+    exit 1
+  fi
+
+  echo "Validated mihomo minos: $minos"
 }
 
 resolve_mihomo_version() {
@@ -139,6 +175,7 @@ prepare_mihomo() {
     echo "Prepared mihomo is not a valid Mach-O binary: $PREPROCESSED_MIHOMO_PATH" >&2
     exit 1
   fi
+  validate_mihomo_minos "$PREPROCESSED_MIHOMO_PATH"
 
   install -m 755 "$PREPROCESSED_MIHOMO_PATH" "$MIHOMO_RESOURCE_PATH"
   echo "Updated source mihomo resource: $MIHOMO_RESOURCE_PATH"

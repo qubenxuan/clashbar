@@ -95,14 +95,13 @@ struct AttachedPopoverMenu<Label: View, Content: View>: View {
     @ViewBuilder
     var popoverContent: some View {
         if self.shouldBuildPopoverContent {
-            ScrollView(.vertical) {
+            ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 0) {
                     self.content {
                         self.dismissPopover()
                     }
                 }
             }
-            .scrollIndicators(.hidden)
             .frame(width: self.width, alignment: .leading)
             .frame(maxHeight: self.maxHeight)
             .padding(T.space8)

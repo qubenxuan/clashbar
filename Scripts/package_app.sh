@@ -14,6 +14,7 @@ PREPROCESSED_ICON_PATH="${PREPROCESSED_ICON_PATH:-$PREPROCESS_DIR/${APP_NAME}.ic
 PREPROCESSED_MIHOMO_PATH="${PREPROCESSED_MIHOMO_PATH:-$PREPROCESS_DIR/mihomo}"
 REQUIRE_MIHOMO_BINARY="${REQUIRE_MIHOMO_BINARY:-1}"
 BUNDLE_MIHOMO_BINARY="${BUNDLE_MIHOMO_BINARY:-1}"
+export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-12.0}"
 
 APP="$ROOT/dist/${APP_NAME}.app"
 HELPER_LABEL="com.clashbar.helper"
@@ -268,6 +269,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>${APP_VERSION}</string>
 <key>CFBundleVersion</key><string>${BUILD_NUMBER}</string>
+<key>LSMinimumSystemVersion</key><string>12.0</string>
 $ICON_PLIST_ENTRY
 <key>ClashBarBundlesMihomoCore</key>${BUNDLES_MIHOMO_CORE_PLIST_VALUE}
 <key>NSLocationWhenInUseUsageDescription</key><string>ClashBar uses your current Wi-Fi name to switch proxy config profiles automatically.</string>

@@ -35,6 +35,8 @@ cat >"$output_path" <<EOF
 
 ### 📥 下载地址 (Downloads)
 
+支持 macOS 12 Monterey 及更高版本。macOS 12 下登录项功能可能需要手动在系统登录项中添加 ClashBar；系统代理 Helper 的应用内注册暂不支持 macOS 12，可先使用手动代理设置。
+
 请根据您的 Mac 处理器芯片选择对应的版本下载（普通用户建议下载带有 **[内置内核]** 的版本）：
 
 | 🖥 平台架构 (Architecture) | 📦 内置 Mihomo 内核 (默认推荐) | 🛠️ 无内核纯净版 (适合高阶用户) |

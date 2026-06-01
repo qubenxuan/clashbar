@@ -7,7 +7,7 @@
 基于 `SwiftUI + AppKit` 构建、由 `mihomo` 驱动的原生 macOS 菜单栏代理客户端，专注轻量、稳定与可观测。
 
 <p>
-  <img alt="Platform" src="https://img.shields.io/badge/macOS-13%2B-111111?style=flat-square&logo=apple" />
+  <img alt="Platform" src="https://img.shields.io/badge/macOS-12%2B-111111?style=flat-square&logo=apple" />
   <img alt="Swift" src="https://img.shields.io/badge/Swift-6.2-F05138?style=flat-square&logo=swift" />
   <img alt="Build" src="https://img.shields.io/badge/Build-SwiftPM-0A84FF?style=flat-square" />
   <img alt="i18n" src="https://img.shields.io/badge/i18n-zh--Hans%20%7C%20en-34C759?style=flat-square" />
@@ -37,6 +37,8 @@
 
 ClashBar 是一款基于 `mihomo` 内核的原生 macOS 菜单栏代理客户端，专注于轻量、稳定、可观测的代理管理体验。
 在不打开复杂主窗口的前提下，你可以在菜单栏中完成配置管理、节点切换、规则刷新、连接排障与系统代理控制。 ✨
+
+支持 macOS 12 Monterey 及更高版本。macOS 12 下登录项功能会使用兼容提示，需要在“系统偏好设置 > 用户与群组 > 登录项”中手动添加；系统代理 Helper 的应用内注册暂不支持 macOS 12，可先使用手动代理设置，后续再引入 legacy helper 方案。
 
 ## 👥 贡献者
 

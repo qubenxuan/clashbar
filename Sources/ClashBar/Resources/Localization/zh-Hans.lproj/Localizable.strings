@@ -223,6 +223,7 @@
 "app.settings.error.save_failed" = "%@ 保存失败: %@";
 "app.settings.overlay_success" = "已保留设置并覆盖当前配置";
 "app.launch_at_login.error.unsupported_environment" = "仅可在 .app 包内启用开机自启，请运行打包后的应用";
+"app.launch_at_login.error.unsupported_system_version" = "开机自启需要 macOS 13 或更高版本。macOS 12 下请在“系统偏好设置 > 用户与群组 > 登录项”中手动添加 ClashBar";
 "app.launch_at_login.error.requires_approval" = "需要在系统设置 > 通用 > 登录项中允许 ClashBar";
 "app.launch_at_login.error.register_failed" = "开启开机自启失败: %@";
 "app.launch_at_login.error.unregister_failed" = "关闭开机自启失败: %@";

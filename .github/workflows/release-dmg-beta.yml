@@ -72,6 +72,8 @@ jobs:
             artifact_name: dmg-x86_64-no-core
             bundle_mihomo_binary: '0'
     runs-on: macos-15
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '12.0'
     permissions:
       contents: read
     steps:
@@ -99,6 +101,7 @@ jobs:
       - name: Build app
         shell: bash
         run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
           APP_VERSION="${{ needs.prepare-beta.outputs.version }}" \
           BUILD_NUMBER="${{ needs.prepare-beta.outputs.build_number }}" \
           PREPARE_MIHOMO_BINARY="${{ matrix.bundle_mihomo_binary }}" \
@@ -106,9 +109,17 @@ jobs:
           TARGET_ARCH="${{ matrix.target_arch }}" \
           ./Scripts/build.sh app
 
+      - name: Validate macOS 12 minos
+        shell: bash
+        run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
+          chmod +x Scripts/validate_macos12_minos.sh
+          Scripts/validate_macos12_minos.sh
+
       - name: Build dmg
         shell: bash
         run: |
+          export MACOSX_DEPLOYMENT_TARGET=12.0
           APP_VERSION="${{ needs.prepare-beta.outputs.version }}" \
           DMG_SUFFIX="${{ matrix.dmg_suffix }}" \
           ./Scripts/build.sh dmg

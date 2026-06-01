@@ -6,7 +6,7 @@ let package = Package(
     name: "ClashBar",
     defaultLocalization: "zh-Hans",
     platforms: [
-        .macOS(.v13),
+        .macOS(.v12),
     ],
     products: [
         .executable(name: "ClashBar", targets: ["ClashBar"]),
